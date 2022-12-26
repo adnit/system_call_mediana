@@ -2,22 +2,41 @@
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 
-asmlinkage long sys_mediana(size_t size, int __user *array, int __user *result)
+asmlinkage long sys_mediana(int __user *array, size_t size, int __user *result)
 {
-    int median;
-    if (arr == NULL || n <= 0)
+    if (array == NULL || size == 0)
         return -EINVAL;
 
-    if (!access_ok(VERIFY_READ, arr, n * sizeof(int)))
+    // Allocate memory to store the array
+    int *karray = kmalloc(size * sizeof(int), GFP_KERNEL);
+    if (karray == NULL)
+        return -ENOMEM;
+
+    // Copy the array from user space to kernel space
+    int ret = copy_from_user(karray, array, size * sizeof(int));
+    if (ret != 0) {
+        kfree(karray);
         return -EFAULT;
-    
-    sort(arr, arr + n, cmp_int, NULL);
+    }
 
-    if (n % 2 == 0)
-        median = (arr[n / 2] + arr[n / 2 - 1]) / 2;
+    // Sort the array
+    sort(karray, size, sizeof(int), cmp_int, NULL);
+
+    // Calculate the median
+    int median;
+    if (size % 2 == 0)
+        median = (karray[size / 2 - 1] + karray[size / 2]) / 2;
     else
-        median = arr[n / 2];
+        median = karray[size / 2];
 
-    return median;
+    // Copy the result back to user space
+    ret = copy_to_user(result, &median, sizeof(int));
+    if (ret != 0) {
+        kfree(karray);
+        return -EFAULT;
+    }
+
+    // Free the memory and return success
+    kfree(karray);
+    return 0;
 }
-
